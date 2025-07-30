@@ -1,0 +1,2857 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Mouvements de Caisse - Casino (v2.1 - Production)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        :root {
+            --color-primary: #2a5298;
+            --color-success: #28a745;
+            --color-warning: #ffc107;
+            --color-danger: #dc3545;
+            --color-info: #17a2b8;
+            --shadow-light: 0 2px 4px rgba(0,0,0,0.1);
+            --shadow-medium: 0 4px 8px rgba(0,0,0,0.15);
+            --shadow-heavy: 0 8px 16px rgba(0,0,0,0.2);
+            --border-radius: 8px;
+            --transition: all 0.3s ease;
+        }
+
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            padding: 12px 20px;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            box-shadow: var(--shadow-heavy);
+            transform: translateY(-100%);
+            transition: var(--transition);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-bar.show {
+            transform: translateY(0);
+        }
+
+        .status-bar.safe {
+            background: linear-gradient(135deg, var(--color-success) 0%, #20c997 100%);
+        }
+
+        .status-bar.warning {
+            background: linear-gradient(135deg, var(--color-warning) 0%, #e0a800 100%);
+            color: #333;
+        }
+
+        .status-bar.danger {
+            background: linear-gradient(135deg, var(--color-danger) 0%, #c82333 100%);
+        }
+
+        .status-bar .close-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: inherit;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .floating-badge {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: var(--color-danger);
+            color: white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            box-shadow: var(--shadow-heavy);
+            cursor: pointer;
+            transition: var(--transition);
+            z-index: 999;
+        }
+
+        .floating-badge:hover {
+            transform: scale(1.1);
+        }
+
+        .floating-badge.safe {
+            background: var(--color-success);
+        }
+
+        .floating-badge.hidden {
+            display: none;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 60px auto 0;
+            background: white;
+            border-radius: 15px;
+            box-shadow: var(--shadow-heavy);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--color-primary) 0%, #1e3c72 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .header .session-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 12px;
+            border-radius: var(--border-radius);
+            font-size: 0.9em;
+        }
+
+        .header .user-info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 12px;
+            border-radius: var(--border-radius);
+            font-size: 0.9em;
+        }
+
+        .emergency-mode {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            animation: pulseEmergency 2s infinite;
+        }
+
+        @keyframes pulseEmergency {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+        }
+
+        .emergency-banner {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a52);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1em;
+            animation: pulseEmergency 2s infinite;
+        }
+
+        .dashboard {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-bottom: 3px solid var(--color-primary);
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: var(--transition);
+        }
+
+        .dashboard.collapsed {
+            height: 60px;
+            overflow: hidden;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .dashboard-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: var(--color-primary);
+        }
+
+        .dashboard-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .refresh-btn, .toggle-btn {
+            background: var(--color-info);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: var(--transition);
+        }
+
+        .refresh-btn:hover, .toggle-btn:hover {
+            background: #138496;
+            transform: scale(1.05);
+        }
+
+        .auto-refresh-indicator {
+            font-size: 0.8em;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .auto-refresh-indicator.active {
+            color: var(--color-success);
+        }
+
+        .refresh-progress {
+            width: 100%;
+            height: 3px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .refresh-progress-bar {
+            height: 100%;
+            background: var(--color-info);
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: var(--shadow-light);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+        }
+
+        .stat-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+            transition: var(--transition);
+        }
+
+        .stat-number.danger { color: var(--color-danger); }
+        .stat-number.success { color: var(--color-success); }
+        .stat-number.warning { color: var(--color-warning); }
+        .stat-number.info { color: var(--color-info); }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .caissiers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .caissier-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: var(--shadow-light);
+            border-left: 5px solid;
+            position: relative;
+            transition: var(--transition);
+        }
+
+        .caissier-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .caissier-card.libre {
+            border-left-color: var(--color-success);
+            background: #f8fff9;
+        }
+
+        .caissier-card.en-service {
+            border-left-color: var(--color-danger);
+            background: #fff5f5;
+            animation: pulseRed 3s infinite;
+        }
+
+        .caissier-card.en-service-critique {
+            border-left-color: #ff6b6b;
+            background: #ffe0e0;
+            animation: pulseOrange 2s infinite;
+        }
+
+        .caissier-card.anomalie {
+            border-left-color: var(--color-warning);
+            background: #fff3e0;
+            animation: pulseWarning 2.5s infinite;
+        }
+
+        @keyframes pulseRed {
+            0%, 100% { box-shadow: var(--shadow-light); }
+            50% { box-shadow: 0 4px 8px rgba(220,53,69,0.3); }
+        }
+
+        @keyframes pulseOrange {
+            0%, 100% { box-shadow: var(--shadow-light); }
+            50% { box-shadow: 0 4px 8px rgba(255,107,107,0.4); }
+        }
+
+        @keyframes pulseWarning {
+            0%, 100% { box-shadow: var(--shadow-light); }
+            50% { box-shadow: 0 4px 8px rgba(255,152,0,0.4); }
+        }
+
+        .caissier-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .caissier-nom {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: var(--color-primary);
+        }
+
+        .caissier-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .caissier-status.libre {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .caissier-status.en-service {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .caissier-status.anomalie {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .caissier-info {
+            font-size: 0.9em;
+            color: #666;
+            margin: 5px 0;
+        }
+
+        .caissier-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .caissier-action-btn {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .caissier-action-btn.view {
+            background: var(--color-info);
+            color: white;
+        }
+
+        .form-container {
+            padding: 40px;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f8f9fa;
+            transition: var(--transition);
+        }
+
+        .form-section:hover {
+            border-color: var(--color-primary);
+        }
+
+        .form-section h3 {
+            color: var(--color-primary);
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            border-bottom: 2px solid var(--color-primary);
+            padding-bottom: 10px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            position: relative;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            transition: var(--transition);
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
+        }
+
+        .form-group.error input,
+        .form-group.error select {
+            border-color: var(--color-danger);
+            box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+        }
+
+        .emergency-section {
+            background: linear-gradient(135deg, #ffe0e0 0%, #ffcccc 100%);
+            border: 2px solid var(--color-danger);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .emergency-section.active {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .emergency-toggle {
+            background: var(--color-danger);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-weight: bold;
+            transition: var(--transition);
+            margin-bottom: 20px;
+        }
+
+        .emergency-toggle:hover {
+            background: #c82333;
+            transform: scale(1.05);
+        }
+
+        .emergency-toggle.active {
+            background: var(--color-success);
+        }
+
+        .fermeture-section {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%);
+            border: 2px solid var(--color-warning);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .fermeture-section.active {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        .fermeture-section h4 {
+            color: #e65100;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .difference-display {
+            background: white !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            font-size: 1.1em !important;
+            border: 2px solid #ddd !important;
+        }
+
+        .difference-display.negative {
+            background-color: #ffebee !important;
+            color: #c62828 !important;
+            border-color: #c62828 !important;
+        }
+
+        .difference-display.positive {
+            background-color: #e8f5e8 !important;
+            color: #2e7d32 !important;
+            border-color: #2e7d32 !important;
+        }
+
+        .difference-display.zero {
+            background-color: #e3f2fd !important;
+            color: #1565c0 !important;
+            border-color: #1565c0 !important;
+        }
+
+        .validation-section {
+            background: linear-gradient(135deg, var(--color-warning) 0%, #ffed4a 100%);
+        }
+
+        .validation-step {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid var(--color-primary);
+            transition: var(--transition);
+        }
+
+        .validation-step.completed {
+            border-left-color: var(--color-success);
+            background: #d4edda;
+        }
+
+        .validation-step.current {
+            border-left-color: var(--color-warning);
+            background: #fff3cd;
+        }
+
+        .validation-step.error {
+            border-left-color: var(--color-danger);
+            background: #f8d7da;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--color-primary) 0%, #1e3c72 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: var(--border-radius);
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: var(--transition);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--color-success) 0%, #20c997 100%);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--color-warning) 0%, #ffed4a 100%);
+            color: #333;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--color-danger) 0%, #c82333 100%);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin: 15px 0;
+            font-weight: bold;
+            position: relative;
+            transition: var(--transition);
+        }
+
+        .alert.dismissible {
+            padding-right: 40px;
+        }
+
+        .alert .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 1.2em;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .connection-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            z-index: 1000;
+            transition: var(--transition);
+        }
+
+        .connection-status.online {
+            background: var(--color-success);
+            color: white;
+        }
+
+        .connection-status.offline {
+            background: var(--color-danger);
+            color: white;
+        }
+
+        .connection-status.reconnecting {
+            background: var(--color-warning);
+            color: #333;
+        }
+
+        .total-display {
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: var(--color-primary);
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: var(--border-radius);
+            margin: 20px 0;
+            border: 2px solid var(--color-primary);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid var(--color-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .offline-indicator {
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+            border: 2px solid var(--color-danger);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            color: var(--color-danger);
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 70px 10px 0;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .caissiers-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .header .session-info,
+            .header .user-info {
+                position: static;
+                display: inline-block;
+                margin: 5px;
+            }
+            
+            .dashboard-header {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Barre de statut -->
+    <div id="statusBar" class="status-bar">
+        <span id="statusMessage">Initialisation du système...</span>
+        <button class="close-btn" onclick="hideStatusBar()">✕</button>
+    </div>
+
+    <!-- Badge flottant -->
+    <div id="floatingBadge" class="floating-badge hidden" onclick="toggleDashboard()">
+        <span id="badgeNumber">0</span>
+    </div>
+
+    <!-- Indicateur de connexion -->
+    <div id="connectionStatus" class="connection-status online">
+        🟢 Connecté
+    </div>
+
+    <div class="container fade-in">
+        <!-- Header -->
+        <div class="header" id="mainHeader">
+            <div class="user-info" id="userInfo">
+                👤 Chargement...
+            </div>
+            <div class="session-info" id="sessionInfo">
+                📅 Session: <span id="currentSession"></span>
+            </div>
+            <h1>🎰 Gestion Mouvements de Caisse</h1>
+            <p>Système de suivi des opérations de caisse - Casino (v2.1 - Production)</p>
+        </div>
+
+        <!-- Banner mode urgence -->
+        <div id="emergencyBanner" class="emergency-banner" style="display: none;">
+            🚨 MODE URGENCE ACTIVÉ - Certaines validations sont désactivées
+        </div>
+
+        <!-- Indicateur hors ligne -->
+        <div id="offlineIndicator" class="offline-indicator" style="display: none;">
+            🔴 Mode hors ligne - Fonctionnalités limitées
+        </div>
+
+        <!-- Dashboard des caissiers -->
+        <div id="dashboard" class="dashboard">
+            <div class="dashboard-header">
+                <h3 class="dashboard-title">👥 État des Caissiers en Temps Réel</h3>
+                <div class="dashboard-controls">
+                    <div class="auto-refresh-indicator" id="autoRefreshIndicator">
+                        <span>🔄</span>
+                        <span>Auto: 30s</span>
+                        <div class="refresh-progress">
+                            <div class="refresh-progress-bar" id="refreshProgressBar"></div>
+                        </div>
+                    </div>
+                    <button class="refresh-btn" onclick="rafraichirEtatCaissiers(true)">
+                        🔄 Actualiser
+                    </button>
+                    <button class="toggle-btn" onclick="toggleDashboard()">
+                        📊 Masquer
+                    </button>
+                </div>
+            </div>
+
+            <!-- Statistiques rapides -->
+            <div class="stats-row">
+                <div class="stat-item">
+                    <div id="statTotal" class="stat-number">-</div>
+                    <div class="stat-label">Total Caissiers</div>
+                </div>
+                <div class="stat-item">
+                    <div id="statLibres" class="stat-number success">-</div>
+                    <div class="stat-label">Libres</div>
+                </div>
+                <div class="stat-item">
+                    <div id="statEnService" class="stat-number danger">-</div>
+                    <div class="stat-label">En Service</div>
+                </div>
+                <div class="stat-item">
+                    <div id="statCritiques" class="stat-number warning">-</div>
+                    <div class="stat-label">Critiques (>1j)</div>
+                </div>
+                <div class="stat-item">
+                    <div id="statAnomalies" class="stat-number info">-</div>
+                    <div class="stat-label">Anomalies</div>
+                </div>
+            </div>
+
+            <!-- Grille des caissiers -->
+            <div id="caissiersGrid" class="caissiers-grid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    Chargement de l'état des caissiers...
+                </div>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <form id="movementForm">
+                <!-- Section Mode Urgence -->
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <button type="button" id="emergencyToggle" class="emergency-toggle" onclick="toggleEmergencyMode()">
+                        🚨 Activer Mode Urgence
+                    </button>
+                </div>
+
+                <!-- Section Mode Urgence (masquée par défaut) -->
+                <div id="emergencySection" class="emergency-section">
+                    <h3>🚨 Mode Urgence - Validation Manager Requise</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="managerName">Manager (N+1)</label>
+                            <select id="managerName" name="managerName">
+                                <option value="">Chargement des managers...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="managerCode">Code Manager</label>
+                            <input type="password" id="managerCode" name="managerCode" 
+                                   pattern="[0-9]{6,8}" maxlength="8" placeholder="Code d'urgence">
+                        </div>
+                    </div>
+                    <div class="alert alert-warning">
+                        <strong>⚠️ ATTENTION :</strong> Le mode urgence permet de contourner certaines validations. 
+                        Utilisez uniquement en cas d'urgence opérationnelle.
+                    </div>
+                </div>
+
+                <!-- Section Informations Générales -->
+                <div class="form-section">
+                    <h3>📋 Informations Générales</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="session">Session (Date)</label>
+                            <input type="date" id="session" name="session" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="caisse">Caisse</label>
+                            <select id="caisse" name="caisse" required onchange="mettreAJourTypesOperations()">
+                                <option value="">Chargement des caisses...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="typeOperation">Type d'Opération</label>
+                            <select id="typeOperation" name="typeOperation" required onchange="handleOperationTypeChange()">
+                                <option value="">Sélectionner d'abord une caisse</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="caissier">Caissier</label>
+                            <select id="caissier" name="caissier" required onchange="mettreAJourTypesOperations()">
+                                <option value="">Chargement des caissiers...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="inspecteur">Inspecteur</label>
+                            <select id="inspecteur" name="inspecteur" required>
+                                <option value="">Chargement des inspecteurs...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Montants -->
+                <div class="form-section">
+                    <h3>💰 Détail des Montants</h3>
+                    
+                    <h4>Billets</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="billets500">Billets 500F</label>
+                            <input type="number" id="billets500" name="billets500" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label for="billets1000">Billets 1000F</label>
+                            <input type="number" id="billets1000" name="billets1000" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label for="billets2000">Billets 2000F</label>
+                            <input type="number" id="billets2000" name="billets2000" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label for="billets5000">Billets 5000F</label>
+                            <input type="number" id="billets5000" name="billets5000" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label for="billets10000">Billets 10000F</label>
+                            <input type="number" id="billets10000" name="billets10000" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                    </div>
+
+                    <h4>Pièces</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="pieces100">Pièces 100F</label>
+                            <input type="number" id="pieces100" name="pieces100" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label for="pieces200">Pièces 200F</label>
+                            <input type="number" id="pieces200" name="pieces200" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label for="pieces500">Pièces 500F</label>
+                            <input type="number" id="pieces500" name="pieces500" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                    </div>
+
+                    <h4>Cartes</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cartesPuce">Cartes à Puce (<span id="cartePuceValue">2000</span>F/unité)</label>
+                            <input type="number" id="cartesPuce" name="cartesPuce" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group" id="cartesBancairesGroup" style="display:none;">
+                            <label for="cartesBancaires">Montant Cartes Bancaires (F)</label>
+                            <input type="number" id="cartesBancaires" name="cartesBancaires" min="0" value="0" class="money-input" oninput="calculateTotal()">
+                        </div>
+                    </div>
+
+                    <!-- Section Fermeture de Quart -->
+                    <div id="fermetureQuartSection" class="fermeture-section">
+                        <h4>🔒 Informations Fermeture de Quart</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="infoQuartTravail">Montant Quart de Travail (F)</label>
+                                <input type="number" id="infoQuartTravail" name="infoQuartTravail" 
+                                       min="0" value="0" class="money-input" step="1"
+                                       placeholder="Ex: 50000" oninput="calculateTotal()">
+                                <small style="color: #666; font-size: 0.9em;">
+                                    Montant numérique attendu pour ce quart
+                                </small>
+                            </div>
+                            <div class="form-group">
+                                <label for="differenceDisplay">Différence (F)</label>
+                                <input type="text" id="differenceDisplay" name="differenceDisplay" 
+                                       readonly class="difference-display" value="0 F">
+                                <small style="color: #666; font-size: 0.9em;">
+                                    Calculé automatiquement: Total - Quart de Travail
+                                </small>
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <strong>ℹ️ Information:</strong> 
+                            La différence sera calculée automatiquement. 
+                            <br>• Positif = Excédent | Négatif = Manquant | Zéro = Équilibré
+                        </div>
+                    </div>
+
+                    <div class="total-display">
+                        <span>💎 Total du Mouvement: </span>
+                        <span id="totalAmount">0 F</span>
+                    </div>
+                </div>
+
+                <!-- Section Validation -->
+                <div class="form-section validation-section">
+                    <h3>✅ Validation des Opérations</h3>
+                    
+                    <div class="validation-step current" id="inspecteurValidation">
+                        <strong>Étape 1: Validation Inspecteur</strong>
+                        <div class="form-row" style="margin-top: 15px;">
+                            <div class="form-group">
+                                <label for="codeInspecteur">Code Inspecteur (6-8 chiffres)</label>
+                                <input type="password" id="codeInspecteur" name="codeInspecteur" 
+                                       pattern="[0-9]{6,8}" maxlength="8" placeholder="Entrez votre code">
+                            </div>
+                            <div class="form-group">
+                                <button type="button" id="btnValidateInspecteur" class="btn btn-warning" disabled onclick="validateInspecteur()">
+                                    Valider Inspecteur
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="validation-step" id="caissierValidation">
+                        <strong>Étape 2: Validation Caissier</strong>
+                        <div class="form-row" style="margin-top: 15px;">
+                            <div class="form-group">
+                                <label for="codeCaissier">Code Caissier (6-8 chiffres)</label>
+                                <input type="password" id="codeCaissier" name="codeCaissier" 
+                                       pattern="[0-9]{6,8}" maxlength="8" placeholder="Entrez votre code" disabled>
+                            </div>
+                            <div class="form-group">
+                                <button type="button" id="btnValidateCaissier" class="btn btn-warning" disabled onclick="validateCaissier()">
+                                    Valider Caissier
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Commentaires -->
+                <div class="form-section">
+                    <h3>📝 Commentaires</h3>
+                    <div class="form-group">
+                        <label for="commentaires">Observations (optionnel)</label>
+                        <textarea id="commentaires" name="commentaires" rows="3" 
+                                  placeholder="Ajoutez vos observations ici..."></textarea>
+                    </div>
+                </div>
+
+                <!-- Boutons d'action -->
+                <div style="text-align: center; margin-top: 30px;">
+                    <button type="submit" id="btnSubmit" class="btn btn-success" disabled>
+                        💾 Enregistrer le Mouvement
+                    </button>
+                    <button type="button" id="btnReset" class="btn" style="margin-left: 15px;" onclick="resetForm()">
+                        🔄 Nouveau Mouvement
+                    </button>
+                </div>
+
+                <!-- Messages -->
+                <div id="messages"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // CONFIGURATION ET ÉTAT DE L'APPLICATION - VERSION PRODUCTION
+        // ============================================================================
+
+        // Configuration centralisée
+        const AppConfig = {
+            VERSION: '2.1.0-PRODUCTION',
+            REFRESH_INTERVAL: 30000,
+            MAX_RETRY_ATTEMPTS: 3,
+            RETRY_DELAY: 1000,
+            CACHE_DURATION: 300000, // 5 minutes
+            
+            // URL Google Apps Script - PRODUCTION
+            WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbz0Niwvcys5KSO9swenM1sO3y8x_WNgVPHwipaIStvTuO5-LRDMepiSj5mHLGUcvHQ/exec',
+            
+            // Configuration des URLs pour déploiement
+            setWebAppUrl: function(url) {
+                this.WEB_APP_URL = url;
+                localStorage.setItem('caisse_web_app_url', url);
+                console.log('URL Web App configurée:', url);
+            }
+        };
+
+        // État global de l'application
+        const AppState = {
+            isEmergencyMode: false,
+            userLevel: null,
+            userInfo: null,
+            parametresData: null,
+            etatCaissiers: [],
+            dashboardVisible: true,
+            autoRefreshActive: true,
+            refreshTimer: null,
+            connectionStatus: 'online',
+            validationState: {
+                inspecteur: false,
+                caissier: false
+            },
+            cache: new Map(),
+            initialized: false
+        };
+
+        // ============================================================================
+        // GESTIONNAIRES PRINCIPAUX - VERSION PRODUCTION
+        // ============================================================================
+
+        // Gestionnaire de messages
+        class MessageManager {
+            static show(message, type = 'info', persistent = false) {
+                const messagesDiv = document.getElementById('messages');
+                const alertDiv = document.createElement('div');
+                
+                alertDiv.className = `alert alert-${type} fade-in ${persistent ? 'dismissible' : ''}`;
+                alertDiv.innerHTML = `
+                    ${message}
+                    ${persistent ? '<button class="close-btn" onclick="this.parentElement.remove()">✕</button>' : ''}
+                `;
+                
+                messagesDiv.appendChild(alertDiv);
+                
+                if (!persistent) {
+                    setTimeout(() => {
+                        if (alertDiv.parentNode) {
+                            alertDiv.remove();
+                        }
+                    }, 5000);
+                }
+
+                return alertDiv;
+            }
+
+            static clear() {
+                document.getElementById('messages').innerHTML = '';
+            }
+
+            static showError(message) {
+                return this.show(message, 'danger', true);
+            }
+
+            static showSuccess(message) {
+                return this.show(message, 'success');
+            }
+
+            static showWarning(message) {
+                return this.show(message, 'warning', true);
+            }
+        }
+
+        // ============================================================================
+// SOLUTION HTML - GESTIONNAIRE DE CONNEXION JSONP
+// Remplacez la classe ConnectionManager dans votre HTML par celle-ci
+// ============================================================================
+
+// Gestionnaire de connexion avec support JSONP pour contourner CORS
+class ConnectionManager {
+    static callbackCounter = 0;
+    static pendingRequests = new Map();
+
+    static async makeRequest(url, options = {}) {
+        const startTime = performance.now();
+        const maxRetries = options.maxRetries || AppConfig.MAX_RETRY_ATTEMPTS;
+        let lastError;
+        let retryDelay = AppConfig.RETRY_DELAY;
+
+        // Vérifier le cache d'abord
+        const cacheKey = url + JSON.stringify(options);
+        const cached = AppState.cache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < AppConfig.CACHE_DURATION) {
+            console.log('📦 Utilisation cache:', url.split('?')[0]);
+            return { ...cached.data, cached: true };
+        }
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                this.updateConnectionStatus('online');
+                
+                console.log(`🌐 API Call JSONP (tentative ${attempt}/${maxRetries}):`, url.split('?')[0]);
+                
+                // Utiliser JSONP au lieu de fetch pour contourner CORS
+                const result = await this.makeJsonpRequest(url, options);
+                
+                const duration = performance.now() - startTime;
+                
+                // Mettre en cache le résultat
+                AppState.cache.set(cacheKey, {
+                    data: result,
+                    timestamp: Date.now()
+                });
+
+                console.log(`✅ API Success JSONP (${Math.round(duration)}ms):`, result.cached ? '[CACHED]' : '[FRESH]');
+                
+                return result;
+
+            } catch (error) {
+                lastError = error;
+                console.warn(`❌ Tentative JSONP ${attempt}/${maxRetries} échouée:`, error.message);
+
+                if (attempt < maxRetries) {
+                    this.updateConnectionStatus('reconnecting');
+                    
+                    // Retry intelligent : délai croissant
+                    const waitTime = retryDelay * Math.pow(2, attempt - 1);
+                    console.log(`⏳ Nouvelle tentative dans ${waitTime}ms...`);
+                    
+                    await this.delay(waitTime);
+                } else {
+                    this.updateConnectionStatus('offline');
+                }
+            }
+        }
+
+        const totalDuration = performance.now() - startTime;
+        throw new Error(`Échec JSONP après ${maxRetries} tentatives (${Math.round(totalDuration)}ms): ${lastError.message}`);
+    }
+
+    // Nouvelle méthode JSONP pour contourner CORS
+    static makeJsonpRequest(url, options = {}) {
+        return new Promise((resolve, reject) => {
+            // Générer un nom de callback unique
+            const callbackName = `jsonp_callback_${++this.callbackCounter}_${Date.now()}`;
+            
+            // Ajouter le paramètre callback à l'URL
+            const separator = url.includes('?') ? '&' : '?';
+            const jsonpUrl = `${url}${separator}callback=${callbackName}`;
+            
+            // Créer l'élément script
+            const script = document.createElement('script');
+            script.src = jsonpUrl;
+            
+            // Timeout pour éviter les requêtes qui traînent
+            const timeout = setTimeout(() => {
+                this.cleanupJsonpRequest(callbackName, script);
+                reject(new Error('JSONP timeout - requête trop lente'));
+            }, options.timeout || 30000);
+            
+            // Définir le callback global
+            window[callbackName] = (data) => {
+                clearTimeout(timeout);
+                this.cleanupJsonpRequest(callbackName, script);
+                
+                // Vérifier la validité de la réponse
+                if (data && typeof data === 'object') {
+                    resolve(data);
+                } else {
+                    reject(new Error('Réponse JSONP invalide'));
+                }
+            };
+            
+            // Gérer les erreurs de chargement du script
+            script.onerror = () => {
+                clearTimeout(timeout);
+                this.cleanupJsonpRequest(callbackName, script);
+                reject(new Error('Erreur de chargement JSONP - vérifiez l\'URL'));
+            };
+            
+            // Injecter le script dans la page
+            document.head.appendChild(script);
+            
+            // Stocker la requête pour le nettoyage
+            this.pendingRequests.set(callbackName, { script, timeout });
+        });
+    }
+    
+    // Nettoyage des ressources JSONP
+    static cleanupJsonpRequest(callbackName, script) {
+        // Supprimer le callback global
+        if (window[callbackName]) {
+            delete window[callbackName];
+        }
+        
+        // Supprimer le script du DOM
+        if (script && script.parentNode) {
+            script.parentNode.removeChild(script);
+        }
+        
+        // Supprimer de la liste des requêtes en attente
+        this.pendingRequests.delete(callbackName);
+    }
+    
+    // Méthode de fallback avec fetch (pour test)
+    static async makeFetchRequest(url, options = {}) {
+        const response = await fetch(url, {
+            method: options.method || 'GET',
+            mode: 'cors',
+            cache: 'no-cache',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                ...options.headers
+            },
+            body: options.body ? JSON.stringify(options.body) : undefined,
+            ...options
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return await response.json();
+    }
+
+    static delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    static updateConnectionStatus(status) {
+        AppState.connectionStatus = status;
+        const indicator = document.getElementById('connectionStatus');
+        const offlineIndicator = document.getElementById('offlineIndicator');
+        
+        indicator.className = `connection-status ${status}`;
+        
+        const statusConfig = {
+            'online': { icon: '🟢', text: 'Connecté JSONP', color: '#28a745' },
+            'offline': { icon: '🔴', text: 'Déconnecté', color: '#dc3545' },
+            'reconnecting': { icon: '🟡', text: 'Reconnexion JSONP...', color: '#ffc107' }
+        };
+        
+        const config = statusConfig[status] || statusConfig.offline;
+        indicator.innerHTML = `${config.icon} ${config.text}`;
+        indicator.style.backgroundColor = config.color;
+
+        // Afficher/masquer l'indicateur hors ligne
+        if (status === 'offline') {
+            offlineIndicator.style.display = 'block';
+        } else {
+            offlineIndicator.style.display = 'none';
+        }
+    }
+
+    static async testConnection() {
+        try {
+            const startTime = performance.now();
+            const result = await this.makeRequest(`${AppConfig.WEB_APP_URL}?action=test`);
+            const duration = performance.now() - startTime;
+            
+            if (result.success) {
+                MessageManager.showSuccess(`✅ Connexion JSONP OK (${Math.round(duration)}ms)`);
+                return true;
+            } else {
+                MessageManager.showError('❌ Test de connexion JSONP échoué');
+                return false;
+            }
+        } catch (error) {
+            MessageManager.showError(`❌ Connexion JSONP impossible: ${error.message}`);
+            return false;
+        }
+    }
+    
+    // Méthode de diagnostic CORS vs JSONP
+    static async diagnosticCorsVsJsonp() {
+        console.log('🔍 DIAGNOSTIC CORS vs JSONP');
+        console.log('============================');
+        
+        const testUrl = `${AppConfig.WEB_APP_URL}?action=test`;
+        
+        // Test 1: Fetch classique (va échouer avec CORS)
+        console.log('1️⃣ Test FETCH (attendu: erreur CORS)...');
+        try {
+            const fetchResult = await this.makeFetchRequest(testUrl);
+            console.log('✅ FETCH réussi (surprenant!):', fetchResult);
+        } catch (fetchError) {
+            console.log('❌ FETCH échoué (normal):', fetchError.message);
+        }
+        
+        // Test 2: JSONP (devrait réussir)
+        console.log('2️⃣ Test JSONP (attendu: succès)...');
+        try {
+            const jsonpResult = await this.makeJsonpRequest(testUrl);
+            console.log('✅ JSONP réussi:', jsonpResult);
+            return { success: true, method: 'JSONP', data: jsonpResult };
+        } catch (jsonpError) {
+            console.log('❌ JSONP échoué:', jsonpError.message);
+            return { success: false, error: jsonpError.message };
+        }
+    }
+    
+    // Nettoyage global des requêtes en attente
+    static cleanup() {
+        console.log(`🧹 Nettoyage ${this.pendingRequests.size} requêtes JSONP en attente...`);
+        
+        this.pendingRequests.forEach((request, callbackName) => {
+            if (request.timeout) {
+                clearTimeout(request.timeout);
+            }
+            this.cleanupJsonpRequest(callbackName, request.script);
+        });
+        
+        this.pendingRequests.clear();
+        console.log('✅ Nettoyage JSONP terminé');
+    }
+}
+
+// ============================================================================
+// FONCTION DE TEST IMMÉDIAT DANS LA CONSOLE
+// ============================================================================
+
+// Test immédiat à coller dans la console du navigateur
+function testJsonpImmediat() {
+    console.log('🧪 TEST JSONP IMMÉDIAT');
+    console.log('======================');
+    
+    // URL de votre API (remplacez si nécessaire)
+    const API_URL = 'https://script.google.com/macros/s/AKfycbz0Niwvcys5KSO9swenM1sO3y8x_WNgVPHwipaIStvTuO5-LRDMepiSj5mHLGUcvHQ/exec';
+    
+    // Test JSONP manuel
+    const callbackName = 'testCallback_' + Date.now();
+    const testUrl = `${API_URL}?action=test&callback=${callbackName}`;
+    
+    console.log('📋 URL de test:', testUrl);
+    console.log('🔧 Callback:', callbackName);
+    
+    // Définir le callback
+    window[callbackName] = function(data) {
+        console.log('✅ JSONP RÉUSSI!');
+        console.log('📊 Données reçues:', data);
+        
+        if (data.success) {
+            console.log('🎉 API FONCTIONNELLE VIA JSONP!');
+            console.log('💡 Solution: Utilisez le ConnectionManager JSONP corrigé');
+        } else {
+            console.log('❌ API répond mais avec erreur:', data.message);
+        }
+        
+        // Nettoyage
+        delete window[callbackName];
+        if (script.parentNode) {
+            script.parentNode.removeChild(script);
+        }
+    };
+    
+    // Créer et injecter le script
+    const script = document.createElement('script');
+    script.src = testUrl;
+    script.onerror = function() {
+        console.log('❌ ERREUR CHARGEMENT SCRIPT JSONP');
+        console.log('🔍 Vérifiez que l\'URL est correcte et que le code GAS supporte JSONP');
+        delete window[callbackName];
+    };
+    
+    document.head.appendChild(script);
+    
+    // Timeout de sécurité
+    setTimeout(() => {
+        if (window[callbackName]) {
+            console.log('⏰ TIMEOUT JSONP - Pas de réponse après 10 secondes');
+            delete window[callbackName];
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        }
+    }, 10000);
+    
+    console.log('⏳ Test en cours... Attendez la réponse...');
+}
+
+// Exposer pour utilisation dans la console
+window.testJsonpImmediat = testJsonpImmediat;
+window.ConnectionManager = ConnectionManager;
+
+        // Gestionnaire d'auto-refresh
+        class AutoRefreshManager {
+            static start() {
+                if (AppState.refreshTimer) {
+                    this.stop();
+                }
+
+                AppState.autoRefreshActive = true;
+                this.updateIndicator();
+                this.updateProgressBar();
+                
+                AppState.refreshTimer = setInterval(() => {
+                    if (AppState.autoRefreshActive && AppState.connectionStatus === 'online') {
+                        rafraichirEtatCaissiers(false);
+                    }
+                }, AppConfig.REFRESH_INTERVAL);
+            }
+
+            static stop() {
+                if (AppState.refreshTimer) {
+                    clearInterval(AppState.refreshTimer);
+                    AppState.refreshTimer = null;
+                }
+                AppState.autoRefreshActive = false;
+                this.updateIndicator();
+            }
+
+            static updateIndicator() {
+                const indicator = document.getElementById('autoRefreshIndicator');
+                if (AppState.autoRefreshActive) {
+                    indicator.classList.add('active');
+                } else {
+                    indicator.classList.remove('active');
+                }
+            }
+
+            static updateProgressBar() {
+                const progressBar = document.getElementById('refreshProgressBar');
+                let width = 0;
+                const increment = 100 / (AppConfig.REFRESH_INTERVAL / 100);
+
+                const progressTimer = setInterval(() => {
+                    if (!AppState.autoRefreshActive) {
+                        clearInterval(progressTimer);
+                        progressBar.style.width = '0%';
+                        return;
+                    }
+
+                    width += increment;
+                    if (width >= 100) {
+                        width = 0;
+                    }
+                    progressBar.style.width = width + '%';
+                }, 100);
+            }
+        }
+
+        // ============================================================================
+        // CHARGEMENT DES DONNÉES - VERSION PRODUCTION
+        // ============================================================================
+
+        // Chargement des paramètres depuis le serveur
+        async function loadParametres() {
+            try {
+                console.log('📥 Chargement des paramètres...');
+                const url = `${AppConfig.WEB_APP_URL}?action=getParametres`;
+                const result = await ConnectionManager.makeRequest(url);
+                
+                if (result.success && result.data) {
+                    AppState.parametresData = result.data;
+                    
+                    // Remplir les listes déroulantes
+                    populateDropdowns();
+                    
+                    // Mise à jour de la valeur des cartes à puce
+                    const cartePuceValue = AppState.parametresData?.config?.Carte_Puce || 2000;
+                    document.getElementById('cartePuceValue').textContent = cartePuceValue;
+                    
+                    console.log('✅ Paramètres chargés avec succès');
+                    return { success: true };
+                } else {
+                    throw new Error(result.message || 'Erreur inconnue lors du chargement des paramètres');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur chargement paramètres:', error);
+                MessageManager.showError('Erreur de chargement des paramètres: ' + error.message);
+                
+                // Mode dégradé avec paramètres minimaux
+                showOfflineMode();
+                return { success: false, error: error.message };
+            }
+        }
+
+        // Remplissage des listes déroulantes
+        function populateDropdowns() {
+            if (!AppState.parametresData) return;
+            
+            const { caisses, caissiers, inspecteurs, managers } = AppState.parametresData;
+            
+            // Caisses
+            if (caisses && caisses.length > 0) {
+                populateSelect('caisse', caisses.map(c => ({
+                    value: c.value || `${c.nom}|${c.zone}`,
+                    text: c.display || `${c.nom} - ${c.zone}`
+                })));
+            }
+            
+            // Caissiers
+            if (caissiers && caissiers.list) {
+                populateSelect('caissier', caissiers.list.map(c => ({
+                    value: c.nom,
+                    text: c.nom
+                })));
+            }
+            
+            // Inspecteurs
+            if (inspecteurs && inspecteurs.list) {
+                populateSelect('inspecteur', inspecteurs.list.map(i => ({
+                    value: i.nom,
+                    text: i.nom
+                })));
+            }
+            
+            // Managers (pour le mode urgence)
+            if (managers && managers.list) {
+                populateSelect('managerName', managers.list.map(m => ({
+                    value: m.nom,
+                    text: m.nom
+                })));
+            }
+        }
+
+        // Remplir une liste déroulante
+        function populateSelect(selectId, options) {
+            const select = document.getElementById(selectId);
+            const currentValue = select.value;
+            
+            // Conserver la première option (placeholder)
+            const firstOption = select.children[0];
+            select.innerHTML = '';
+            
+            // Nouvelle première option
+            const placeholderText = {
+                'caisse': 'Sélectionner une caisse',
+                'caissier': 'Sélectionner le caissier',
+                'inspecteur': 'Sélectionner l\'inspecteur',
+                'managerName': 'Sélectionner le manager'
+            };
+            
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = placeholderText[selectId] || 'Sélectionner...';
+            select.appendChild(placeholderOption);
+            
+            // Ajouter les options
+            options.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.value = option.value;
+                optionElement.textContent = option.text;
+                select.appendChild(optionElement);
+            });
+            
+            // Restaurer la valeur si elle existe toujours
+            if (currentValue && options.some(opt => opt.value === currentValue)) {
+                select.value = currentValue;
+            }
+        }
+
+        // Mode dégradé hors ligne
+        function showOfflineMode() {
+            MessageManager.showWarning('Mode dégradé activé - Données limitées disponibles');
+            
+            // Charger des données minimales pour permettre au moins la saisie
+            AppState.parametresData = {
+                config: { Carte_Puce: 2000 },
+                caisses: [
+                    { nom: 'Caisse_01', zone: 'Zone_A', display: 'Caisse 01 - Zone A', value: 'Caisse_01|Zone_A' }
+                ],
+                caissiers: {
+                    list: [{ nom: 'Caissier_Test', code: '123456' }],
+                    codes: { 'Caissier_Test': '123456' }
+                },
+                inspecteurs: {
+                    list: [{ nom: 'Inspecteur_Test', code: '345678' }],
+                    codes: { 'Inspecteur_Test': '345678' }
+                },
+                managers: {
+                    list: [{ nom: 'Manager_Test', code: '987654' }],
+                    codes: { 'Manager_Test': '987654' }
+                }
+            };
+            
+            populateDropdowns();
+        }
+
+        // ============================================================================
+        // GESTION DES CAISSIERS - VERSION PRODUCTION
+        // ============================================================================
+
+        // Actualisation de l'état des caissiers
+        async function rafraichirEtatCaissiers(showLoading = false) {
+            try {
+                if (showLoading) {
+                    document.getElementById('caissiersGrid').innerHTML = `
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            Actualisation de l'état des caissiers...
+                        </div>
+                    `;
+                }
+                
+                const url = `${AppConfig.WEB_APP_URL}?action=getEtatTousCaissiers`;
+                const result = await ConnectionManager.makeRequest(url);
+                
+                if (result.success && result.caissiers) {
+                    AppState.etatCaissiers = result.caissiers;
+                    mettreAJourInterface();
+                    
+                    if (showLoading) {
+                        MessageManager.showSuccess('✅ État des caissiers actualisé');
+                    }
+                } else {
+                    throw new Error(result.message || 'Erreur récupération état caissiers');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur actualisation état caissiers:', error);
+                afficherErreurCaissiers('Impossible de récupérer l\'état des caissiers: ' + error.message);
+            }
+        }
+
+        // Mise à jour de l'interface avec les données des caissiers
+        function mettreAJourInterface() {
+            const caissiersLibres = AppState.etatCaissiers.filter(c => c.etat === 'fermee' && !c.anomalie);
+            const caissiersEnService = AppState.etatCaissiers.filter(c => c.etat === 'ouverte');
+            const caissiersCritiques = caissiersEnService.filter(c => c.joursDifference > 1);
+            const caissiersAnomalies = AppState.etatCaissiers.filter(c => c.anomalie);
+
+            // Mise à jour des statistiques
+            updateStats({
+                total: AppState.etatCaissiers.length,
+                libres: caissiersLibres.length,
+                enService: caissiersEnService.length,
+                critiques: caissiersCritiques.length,
+                anomalies: caissiersAnomalies.length
+            });
+
+            // Mise à jour de la barre de statut
+            updateStatusBar(caissiersEnService.length, caissiersCritiques.length, caissiersAnomalies.length);
+
+            // Mise à jour du badge flottant
+            updateFloatingBadge(caissiersEnService.length);
+
+            // Affichage des cartes de caissiers
+            displayCaissiers();
+        }
+
+        // Mise à jour des statistiques
+        function updateStats(stats) {
+            document.getElementById('statTotal').textContent = stats.total;
+            document.getElementById('statLibres').textContent = stats.libres;
+            document.getElementById('statEnService').textContent = stats.enService;
+            document.getElementById('statCritiques').textContent = stats.critiques;
+            document.getElementById('statAnomalies').textContent = stats.anomalies;
+        }
+
+        // Mise à jour de la barre de statut
+        function updateStatusBar(nbEnService, nbCritiques, nbAnomalies) {
+            const statusBar = document.getElementById('statusBar');
+            const statusMessage = document.getElementById('statusMessage');
+
+            statusBar.classList.remove('safe', 'warning', 'danger', 'show');
+
+            if (nbAnomalies > 0) {
+                statusMessage.textContent = `🚨 URGENT: ${nbAnomalies} anomalie(s) détectée(s) sur les caissiers`;
+                statusBar.classList.add('danger', 'show');
+            } else if (nbCritiques > 0) {
+                statusMessage.textContent = `⚠️ ATTENTION: ${nbCritiques} caissier(s) en service depuis plus d'1 jour`;
+                statusBar.classList.add('warning', 'show');
+            } else if (nbEnService === 0) {
+                statusBar.classList.add('safe', 'show');
+                statusMessage.textContent = '✅ Tous les caissiers sont libres';
+                
+                // Masquer automatiquement après 3 secondes
+                setTimeout(() => {
+                    statusBar.classList.remove('show');
+                }, 3000);
+            } else {
+                statusBar.classList.add('warning', 'show');
+                statusMessage.textContent = `🔶 ${nbEnService} caissier(s) en service`;
+            }
+        }
+
+        // Mise à jour du badge flottant
+        function updateFloatingBadge(nbEnService) {
+            const badge = document.getElementById('floatingBadge');
+            const badgeNumber = document.getElementById('badgeNumber');
+
+            if (nbEnService === 0) {
+                badge.classList.add('hidden');
+            } else {
+                badge.classList.remove('hidden', 'safe');
+                if (nbEnService <= 2) {
+                    badge.classList.add('safe');
+                }
+                badgeNumber.textContent = nbEnService;
+            }
+        }
+
+        // Affichage des cartes de caissiers
+        function displayCaissiers() {
+            const grid = document.getElementById('caissiersGrid');
+            
+            if (AppState.etatCaissiers.length === 0) {
+                grid.innerHTML = '<div class="loading">Aucun caissier trouvé</div>';
+                return;
+            }
+
+            const html = AppState.etatCaissiers.map(caissier => {
+                let classeCard = 'libre';
+                let statusText = 'Libre';
+                let statusClass = 'libre';
+                
+                if (caissier.anomalie) {
+                    classeCard = 'anomalie';
+                    statusText = 'Anomalie';
+                    statusClass = 'anomalie';
+                } else if (caissier.etat === 'ouverte') {
+                    if (caissier.joursDifference > 1) {
+                        classeCard = 'en-service-critique';
+                        statusText = 'Service (Critique)';
+                        statusClass = 'en-service';
+                    } else {
+                        classeCard = 'en-service';
+                        statusText = 'En Service';
+                        statusClass = 'en-service';
+                    }
+                }
+                
+                const classeDuree = caissier.joursDifference > 1 ? 'critique' : '';
+                
+                let dureeText = 'Libre';
+                if (caissier.etat === 'ouverte') {
+                    if (caissier.joursDifference === 0) {
+                        dureeText = 'En service aujourd\'hui';
+                    } else if (caissier.joursDifference === 1) {
+                        dureeText = 'En service depuis hier';
+                    } else {
+                        dureeText = `En service depuis ${caissier.joursDifference} jours`;
+                    }
+                }
+
+                const caisseInfo = caissier.caisseActuelle && caissier.caisseActuelle !== 'Aucune' ? 
+                    caissier.caisseActuelle : 'Aucune caisse';
+
+                return `
+                    <div class="caissier-card ${classeCard}">
+                        <div class="caissier-header">
+                            <div class="caissier-nom">👤 ${caissier.caissier}</div>
+                            <div class="caissier-status ${statusClass}">${statusText}</div>
+                        </div>
+                        <div class="caissier-info">
+                            <div class="caissier-caisse">🏪 ${caisseInfo}</div>
+                            <div class="caissier-duree ${classeDuree}">⏱️ ${dureeText}</div>
+                            ${caissier.dernierMouvement ? `<div>📝 ${caissier.dernierMouvement}</div>` : ''}
+                            ${caissier.dateDernierMouvement ? `<div>📅 ${caissier.dateDernierMouvement}</div>` : ''}
+                            ${caissier.anomalie ? `<div style="color: #ff9800; font-weight: bold;">⚠️ ${caissier.info || 'Anomalie détectée'}</div>` : ''}
+                        </div>
+                        <div class="caissier-actions">
+                            <button class="caissier-action-btn view" onclick="viewCaissierDetails('${caissier.caissier}')">
+                                👁️ Voir
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            grid.innerHTML = html;
+        }
+
+        // Affichage d'erreur pour les caissiers
+        function afficherErreurCaissiers(message) {
+            const grid = document.getElementById('caissiersGrid');
+            grid.innerHTML = `
+                <div class="loading" style="color: var(--color-danger);">
+                    ❌ ${message}
+                    <br><br>
+                    <button class="btn btn-warning" onclick="rafraichirEtatCaissiers(true)" style="font-size: 0.9em; padding: 8px 16px;">
+                        🔄 Réessayer
+                    </button>
+                </div>
+            `;
+        }
+
+        // ============================================================================
+        // VALIDATION DES CODES - VERSION PRODUCTION
+        // ============================================================================
+
+        // Vérification du format du code
+        function isValidCode(code) {
+            return code && code.length >= 6 && code.length <= 8 && /^\d+$/.test(code);
+        }
+
+        // Validation inspecteur avec API
+        async function validateInspecteur() {
+            const inspecteur = document.getElementById('inspecteur').value;
+            const code = document.getElementById('codeInspecteur').value;
+            const btn = document.getElementById('btnValidateInspecteur');
+            
+            if (!inspecteur) {
+                MessageManager.showError('Veuillez sélectionner un inspecteur');
+                return;
+            }
+
+            if (!isValidCode(code)) {
+                MessageManager.showError('Code inspecteur doit contenir 6 à 8 chiffres');
+                return;
+            }
+
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            try {
+                let isValid = false;
+                
+                if (AppState.isEmergencyMode) {
+                    // Mode urgence : validation manager d'abord
+                    const managerName = document.getElementById('managerName').value;
+                    const managerCode = document.getElementById('managerCode').value;
+                    
+                    if (!await validateEmergencyManager(managerName, managerCode)) {
+                        return;
+                    }
+                    
+                    // En mode urgence, validation basique du format
+                    isValid = true;
+                } else {
+                    // Mode normal : validation complète via API
+                    const url = `${AppConfig.WEB_APP_URL}?action=validerCode&typeUtilisateur=inspecteur&nomUtilisateur=${encodeURIComponent(inspecteur)}&code=${encodeURIComponent(code)}`;
+                    const result = await ConnectionManager.makeRequest(url);
+                    
+                    if (result.success) {
+                        isValid = result.isValid;
+                    } else {
+                        throw new Error(result.message || 'Erreur de validation');
+                    }
+                }
+                
+                if (isValid) {
+                    AppState.validationState.inspecteur = true;
+                    AppState.userLevel = 'inspecteur';
+                    AppState.userInfo = { name: inspecteur, level: 'inspecteur' };
+                    
+                    updateValidationStep('inspecteurValidation', 'completed');
+                    enableCaissierValidation();
+                    updateUserInfo();
+                    MessageManager.showSuccess('✅ Validation inspecteur réussie!');
+                } else {
+                    throw new Error('Code inspecteur incorrect!');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur validation inspecteur:', error);
+                MessageManager.showError('❌ ' + error.message);
+                updateValidationStep('inspecteurValidation', 'error');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        // Validation caissier avec API
+        async function validateCaissier() {
+            const caissier = document.getElementById('caissier').value;
+            const code = document.getElementById('codeCaissier').value;
+            const btn = document.getElementById('btnValidateCaissier');
+            
+            if (!caissier) {
+                MessageManager.showError('Veuillez sélectionner un caissier');
+                return;
+            }
+
+            if (!isValidCode(code)) {
+                MessageManager.showError('Code caissier doit contenir 6 à 8 chiffres');
+                return;
+            }
+
+            btn.classList.add('loading');
+            btn.disabled = true;
+
+            try {
+                let isValid = false;
+                
+                if (AppState.isEmergencyMode) {
+                    // En mode urgence, validation basique du format
+                    isValid = true;
+                } else {
+                    // Mode normal : validation complète via API
+                    const url = `${AppConfig.WEB_APP_URL}?action=validerCode&typeUtilisateur=caissier&nomUtilisateur=${encodeURIComponent(caissier)}&code=${encodeURIComponent(code)}`;
+                    const result = await ConnectionManager.makeRequest(url);
+                    
+                    if (result.success) {
+                        isValid = result.isValid;
+                    } else {
+                        throw new Error(result.message || 'Erreur de validation');
+                    }
+                }
+                
+                if (isValid) {
+                    AppState.validationState.caissier = true;
+                    updateValidationStep('caissierValidation', 'completed');
+                    document.getElementById('btnSubmit').disabled = false;
+                    MessageManager.showSuccess('✅ Validation caissier réussie! Vous pouvez maintenant enregistrer.');
+                } else {
+                    throw new Error('Code caissier incorrect!');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur validation caissier:', error);
+                MessageManager.showError('❌ ' + error.message);
+                updateValidationStep('caissierValidation', 'error');
+            } finally {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
+        // Validation manager pour mode urgence
+        async function validateEmergencyManager(managerName, managerCode) {
+            if (!managerName || !managerCode) {
+                MessageManager.showError('Manager et code requis pour le mode urgence');
+                return false;
+            }
+
+            if (!isValidCode(managerCode)) {
+                MessageManager.showError('Code manager doit contenir 6 à 8 chiffres');
+                return false;
+            }
+
+            try {
+                const url = `${AppConfig.WEB_APP_URL}?action=validerCode&typeUtilisateur=manager&nomUtilisateur=${encodeURIComponent(managerName)}&code=${encodeURIComponent(managerCode)}`;
+                const result = await ConnectionManager.makeRequest(url);
+                
+                if (result.success && result.isValid) {
+                    return true;
+                } else {
+                    MessageManager.showError('Code manager incorrect');
+                    return false;
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur validation manager:', error);
+                MessageManager.showError('Erreur validation code manager: ' + error.message);
+                return false;
+            }
+        }
+
+        // Activation de la validation caissier
+        function enableCaissierValidation() {
+            document.getElementById('codeCaissier').disabled = false;
+            updateValidationStep('caissierValidation', 'current');
+        }
+
+        // Mise à jour des étapes de validation
+        function updateValidationStep(stepId, status) {
+            const step = document.getElementById(stepId);
+            
+            step.classList.remove('completed', 'current', 'error');
+            
+            if (status) {
+                step.classList.add(status);
+            }
+        }
+
+        // Mise à jour des informations utilisateur
+        function updateUserInfo() {
+            const userInfoElement = document.getElementById('userInfo');
+            
+            if (AppState.userInfo) {
+                userInfoElement.textContent = `👤 ${AppState.userInfo.name} (${AppState.userInfo.level})`;
+            } else {
+                userInfoElement.textContent = '👤 Utilisateur non identifié';
+            }
+        }
+
+        // ============================================================================
+        // GESTION DES TYPES D'OPÉRATIONS - VERSION PRODUCTION
+        // ============================================================================
+
+        // Mise à jour des types d'opérations basée sur le contexte
+        async function mettreAJourTypesOperations() {
+            const caisse = document.getElementById('caisse').value;
+            const caissier = document.getElementById('caissier').value;
+            const session = document.getElementById('session').value;
+            const typeOperationSelect = document.getElementById('typeOperation');
+            
+            // Reset
+            typeOperationSelect.innerHTML = '<option value="">Chargement...</option>';
+            
+            if (!caisse || !caissier || !session) {
+                typeOperationSelect.innerHTML = '<option value="">Sélectionnez d\'abord caisse, caissier et session</option>';
+                return;
+            }
+
+            try {
+                const url = `${AppConfig.WEB_APP_URL}?action=getTypesOperations&caisse=${encodeURIComponent(caisse)}&caissier=${encodeURIComponent(caissier)}&session=${encodeURIComponent(session)}`;
+                const result = await ConnectionManager.makeRequest(url);
+                
+                if (result.success && result.types) {
+                    // Reset du select
+                    typeOperationSelect.innerHTML = '<option value="">Sélectionner le type</option>';
+                    
+                    // Ajouter les types disponibles
+                    result.types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type.value;
+                        option.textContent = type.text;
+                        if (type.disabled) {
+                            option.disabled = true;
+                            option.textContent += ' (Non disponible)';
+                        }
+                        typeOperationSelect.appendChild(option);
+                    });
+                    
+                    // Afficher des infos sur l'état du caissier si disponible
+                    if (result.etatCaissier) {
+                        showCaissierInfo(result.etatCaissier);
+                    }
+                } else {
+                    throw new Error(result.message || 'Erreur chargement types opérations');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur types opérations:', error);
+                
+                // Fallback avec types par défaut
+                typeOperationSelect.innerHTML = `
+                    <option value="">Sélectionner le type</option>
+                    <option value="Ouverture">Ouverture quart de travail</option>
+                    <option value="Avance">Avance fond durant quart</option>
+                    <option value="Fermeture">Fermeture quart de travail</option>
+                `;
+                
+                MessageManager.showWarning('Types d\'opérations par défaut chargés - Vérifiez la connexion');
+            }
+        }
+
+        // Affichage des informations sur l'état du caissier
+        function showCaissierInfo(etatCaissier) {
+            // Supprimer l'ancien div s'il existe
+            const existingDiv = document.getElementById('etat-caissier-info');
+            if (existingDiv) {
+                existingDiv.remove();
+            }
+            
+            // Créer le div d'information
+            const infoDiv = document.createElement('div');
+            infoDiv.id = 'etat-caissier-info';
+            infoDiv.className = 'alert alert-info';
+            infoDiv.style.marginTop = '15px';
+            
+            let statusText = '';
+            if (etatCaissier.etat === 'ouverte') {
+                statusText = `ℹ️ Caissier ${etatCaissier.caissier} actuellement en service sur ${etatCaissier.caisseActuelle} depuis ${etatCaissier.joursDifference} jour(s)`;
+            } else {
+                statusText = `ℹ️ Caissier ${etatCaissier.caissier} actuellement libre`;
+            }
+            
+            infoDiv.innerHTML = statusText;
+            
+            // Insérer après la section informations générales
+            const generalSection = document.querySelector('.form-section');
+            generalSection.appendChild(infoDiv);
+        }
+
+        // ============================================================================
+        // SOUMISSION DU FORMULAIRE - VERSION PRODUCTION
+        // ============================================================================
+
+        // Soumission du formulaire avec sauvegarde réelle
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('btnSubmit');
+            const startTime = performance.now();
+            
+            try {
+                // Validation des champs obligatoires
+                if (!validateRequiredFields()) {
+                    return;
+                }
+                
+                // Validation des codes (sauf en mode urgence avec validation manager)
+                if (!AppState.isEmergencyMode) {
+                    if (!AppState.validationState.inspecteur || !AppState.validationState.caissier) {
+                        MessageManager.showError('Validation complète requise avant enregistrement!');
+                        return;
+                    }
+                }
+                
+                // Validation mode urgence
+                if (AppState.isEmergencyMode && !await validateEmergencyPrerequisites()) {
+                    return;
+                }
+                
+                submitBtn.classList.add('loading');
+                submitBtn.disabled = true;
+                
+                MessageManager.clear();
+                MessageManager.show('⏳ Enregistrement en cours...', 'info');
+                
+                const formData = collectFormData();
+                
+                // Enregistrement réel via API
+                const url = `${AppConfig.WEB_APP_URL}?action=enregistrerMouvement`;
+                const result = await ConnectionManager.makeRequest(url, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...formData,
+                        modeUrgence: AppState.isEmergencyMode,
+                        codeManager: AppState.isEmergencyMode ? document.getElementById('managerCode').value : '',
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                if (result.success) {
+                    const duration = performance.now() - startTime;
+                    await handleSubmitSuccess(result, duration);
+                } else {
+                    throw new Error(result.message || 'Erreur lors de l\'enregistrement');
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur enregistrement:', error);
+                MessageManager.showError('❌ Erreur de connexion: ' + error.message);
+            } finally {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = true; // Reste désactivé jusqu'à nouvelle validation
+            }
+        }
+
+        // Gestion du succès de soumission
+        async function handleSubmitSuccess(result, duration) {
+            const successMessage = `
+                ✅ Mouvement enregistré avec succès! (${Math.round(duration)}ms)<br>
+                <strong>ID:</strong> ${result.idMouvement || 'N/A'}<br>
+                <strong>Total:</strong> ${formatNumber(result.total || 0)} F
+                ${result.difference !== undefined ? `<br><strong>Différence:</strong> ${formatNumber(result.difference)} F` : ''}
+            `;
+            MessageManager.show(successMessage, 'success');
+            
+            // Actualisation données avec indicateur
+            MessageManager.show('🔄 Actualisation des données...', 'info');
+            
+            setTimeout(async () => {
+                try {
+                    await Promise.all([
+                        rafraichirEtatCaissiers(true),
+                        mettreAJourTypesOperations()
+                    ]);
+                    
+                    // Auto-reset après succès
+                    setTimeout(() => {
+                        resetForm();
+                        MessageManager.show('➡️ Prêt pour un nouveau mouvement', 'success');
+                    }, 1500);
+                } catch (error) {
+                    console.warn('Erreur actualisation post-soumission:', error);
+                }
+            }, 1000);
+        }
+
+        // Validation des prérequis mode urgence
+        async function validateEmergencyPrerequisites() {
+            const managerName = document.getElementById('managerName').value;
+            const managerCode = document.getElementById('managerCode').value;
+            
+            return await validateEmergencyManager(managerName, managerCode);
+        }
+
+        // Validation des champs obligatoires
+        function validateRequiredFields() {
+            const requiredFields = ['session', 'caisse', 'typeOperation', 'caissier', 'inspecteur'];
+            for (const field of requiredFields) {
+                if (!document.getElementById(field).value) {
+                    MessageManager.showError(`Le champ ${field} est obligatoire`);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Collecte des données du formulaire
+        function collectFormData() {
+            const [nomCaisse, zoneCaisse] = document.getElementById('caisse').value.split('|');
+            
+            return {
+                session: document.getElementById('session').value,
+                heureOperation: new Date().toLocaleTimeString('fr-FR'),
+                nomCaisse: nomCaisse,
+                zoneCaisse: zoneCaisse,
+                typeOperation: document.getElementById('typeOperation').value,
+                nomCaissier: document.getElementById('caissier').value,
+                codeCaissier: document.getElementById('codeCaissier').value,
+                nomInspecteur: document.getElementById('inspecteur').value,
+                codeInspecteur: document.getElementById('codeInspecteur').value,
+                billets500: parseInt(document.getElementById('billets500').value) || 0,
+                billets1000: parseInt(document.getElementById('billets1000').value) || 0,
+                billets2000: parseInt(document.getElementById('billets2000').value) || 0,
+                billets5000: parseInt(document.getElementById('billets5000').value) || 0,
+                billets10000: parseInt(document.getElementById('billets10000').value) || 0,
+                pieces100: parseInt(document.getElementById('pieces100').value) || 0,
+                pieces200: parseInt(document.getElementById('pieces200').value) || 0,
+                pieces500: parseInt(document.getElementById('pieces500').value) || 0,
+                cartesPuce: parseInt(document.getElementById('cartesPuce').value) || 0,
+                cartesBancaires: parseInt(document.getElementById('cartesBancaires').value) || 0,
+                infoQuartTravail: parseFloat(document.getElementById('infoQuartTravail').value) || 0,
+                commentaires: document.getElementById('commentaires').value
+            };
+        }
+
+        // ============================================================================
+        // FONCTIONS DE CALCUL ET INTERFACE
+        // ============================================================================
+
+        // Calcul automatique du total
+        function calculateTotal() {
+            const billets500 = parseInt(document.getElementById('billets500').value) || 0;
+            const billets1000 = parseInt(document.getElementById('billets1000').value) || 0;
+            const billets2000 = parseInt(document.getElementById('billets2000').value) || 0;
+            const billets5000 = parseInt(document.getElementById('billets5000').value) || 0;
+            const billets10000 = parseInt(document.getElementById('billets10000').value) || 0;
+            
+            const pieces100 = parseInt(document.getElementById('pieces100').value) || 0;
+            const pieces200 = parseInt(document.getElementById('pieces200').value) || 0;
+            const pieces500 = parseInt(document.getElementById('pieces500').value) || 0;
+            
+            const cartesPuce = parseInt(document.getElementById('cartesPuce').value) || 0;
+            const cartesBancaires = parseInt(document.getElementById('cartesBancaires').value) || 0;
+
+            const cartePuceValue = AppState.parametresData?.config?.Carte_Puce || 2000;
+
+            const total = (billets500 * 500) + (billets1000 * 1000) + (billets2000 * 2000) + 
+                         (billets5000 * 5000) + (billets10000 * 10000) +
+                         (pieces100 * 100) + (pieces200 * 200) + (pieces500 * 500) +
+                         (cartesPuce * cartePuceValue) + cartesBancaires;
+
+            document.getElementById('totalAmount').textContent = formatNumber(total) + ' F';
+            
+            // Calcul de la différence pour les fermetures de quart
+            calculateDifference(total);
+        }
+
+        // Calcul de la différence pour fermeture de quart
+        function calculateDifference(totalMouvement) {
+            const typeOperation = document.getElementById('typeOperation').value;
+            const fermetureSection = document.getElementById('fermetureQuartSection');
+            
+            if (typeOperation === 'Fermeture' && fermetureSection.classList.contains('active')) {
+                const infoQuartTravail = parseFloat(document.getElementById('infoQuartTravail').value) || 0;
+                const difference = totalMouvement - infoQuartTravail;
+                
+                const differenceDisplay = document.getElementById('differenceDisplay');
+                differenceDisplay.value = formatNumber(difference) + ' F';
+                
+                // Application du style selon le signe
+                differenceDisplay.classList.remove('negative', 'positive', 'zero');
+                if (difference < 0) {
+                    differenceDisplay.classList.add('negative');
+                } else if (difference > 0) {
+                    differenceDisplay.classList.add('positive');
+                } else {
+                    differenceDisplay.classList.add('zero');
+                }
+            }
+        }
+
+        // Formatage des nombres avec séparateurs
+        function formatNumber(num) {
+            return new Intl.NumberFormat('fr-FR').format(num);
+        }
+
+        // Gestion du type d'opération
+        function handleOperationTypeChange() {
+            const typeOperation = document.getElementById('typeOperation').value;
+            const cartesBancairesGroup = document.getElementById('cartesBancairesGroup');
+            const fermetureQuartSection = document.getElementById('fermetureQuartSection');
+            
+            if (typeOperation === 'Fermeture') {
+                cartesBancairesGroup.style.display = 'block';
+                fermetureQuartSection.classList.add('active');
+            } else {
+                cartesBancairesGroup.style.display = 'none';
+                fermetureQuartSection.classList.remove('active');
+                
+                // Reset des valeurs
+                document.getElementById('cartesBancaires').value = 0;
+                document.getElementById('infoQuartTravail').value = 0;
+                document.getElementById('differenceDisplay').value = '0 F';
+                document.getElementById('differenceDisplay').classList.remove('negative', 'positive', 'zero');
+            }
+            calculateTotal();
+        }
+
+        // ============================================================================
+        // GESTION DU MODE URGENCE - VERSION PRODUCTION
+        // ============================================================================
+
+        // Toggle du mode urgence
+        function toggleEmergencyMode() {
+            if (!AppState.isEmergencyMode) {
+                const confirmed = confirm(`
+⚠️ ACTIVATION MODE URGENCE ⚠️
+
+Ce mode permet de contourner certaines validations.
+✓ Validation manager obligatoire
+✓ Toutes les actions seront auditées
+✓ Utiliser uniquement en cas d'urgence
+
+Continuer ?
+                `);
+                
+                if (!confirmed) return;
+            }
+            
+            AppState.isEmergencyMode = !AppState.isEmergencyMode;
+            updateEmergencyInterface();
+            
+            if (AppState.isEmergencyMode) {
+                MessageManager.showWarning(`
+⚠️ Mode urgence activé<br>
+• Validation manager requise<br>
+• Actions auditées<br>
+• Utilisation exceptionnelle uniquement
+                `);
+                
+                // Audit de l'activation
+                auditEmergencyActivation();
+            } else {
+                MessageManager.show('Mode urgence désactivé.', 'info');
+            }
+        }
+
+        // Mise à jour de l'interface mode urgence
+        function updateEmergencyInterface() {
+            const emergencySection = document.getElementById('emergencySection');
+            const emergencyBanner = document.getElementById('emergencyBanner');
+            const emergencyToggle = document.getElementById('emergencyToggle');
+            const header = document.getElementById('mainHeader');
+
+            if (AppState.isEmergencyMode) {
+                emergencySection.classList.add('active');
+                emergencyBanner.style.display = 'block';
+                emergencyToggle.textContent = '✅ Désactiver Mode Urgence';
+                emergencyToggle.classList.add('active');
+                header.classList.add('emergency-mode');
+                
+                setTimeout(() => {
+                    document.getElementById('managerName').focus();
+                }, 300);
+            } else {
+                emergencySection.classList.remove('active');
+                emergencyBanner.style.display = 'none';
+                emergencyToggle.textContent = '🚨 Activer Mode Urgence';
+                emergencyToggle.classList.remove('active');
+                header.classList.remove('emergency-mode');
+            }
+        }
+
+        // Audit de l'activation du mode urgence
+        function auditEmergencyActivation() {
+            const auditData = {
+                action: 'EMERGENCY_MODE_ACTIVATED',
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                url: window.location.href,
+                sessionData: {
+                    userLevel: AppState.userLevel,
+                    userInfo: AppState.userInfo
+                }
+            };
+            
+            console.warn('🚨 MODE URGENCE ACTIVÉ:', auditData);
+            
+            // Envoyer audit au serveur
+            sendAuditToServer(auditData).catch(err => 
+                console.warn('Impossible d\'envoyer audit:', err.message)
+            );
+        }
+
+        // Envoi d'audit au serveur
+        async function sendAuditToServer(auditData) {
+            try {
+                const url = `${AppConfig.WEB_APP_URL}?action=logAudit`;
+                await ConnectionManager.makeRequest(url, {
+                    method: 'POST',
+                    body: JSON.stringify(auditData)
+                });
+            } catch (error) {
+                // Sauvegarder localement si serveur inaccessible
+                saveAuditLocally(auditData);
+                throw error;
+            }
+        }
+
+        // Sauvegarde locale des audits
+        function saveAuditLocally(auditData) {
+            try {
+                const localAudits = JSON.parse(localStorage.getItem('emergency_audits') || '[]');
+                localAudits.push(auditData);
+                
+                // Garder max 50 audits locaux
+                if (localAudits.length > 50) {
+                    localAudits.splice(0, localAudits.length - 50);
+                }
+                
+                localStorage.setItem('emergency_audits', JSON.stringify(localAudits));
+            } catch (error) {
+                console.warn('Impossible de sauvegarder audit localement:', error);
+            }
+        }
+
+        // ============================================================================
+        // FONCTIONS DE GESTION DE L'INTERFACE
+        // ============================================================================
+
+        // Reset du formulaire
+        function resetForm() {
+            try {
+                console.log('🔄 Reset du formulaire...');
+                
+                // Reset du formulaire HTML
+                document.getElementById('movementForm').reset();
+                
+                // Reset des valeurs numériques
+                const numericInputs = document.querySelectorAll('input[type="number"]');
+                numericInputs.forEach(input => input.value = 0);
+                
+                // Reset des totaux
+                document.getElementById('totalAmount').textContent = '0 F';
+                document.getElementById('differenceDisplay').value = '0 F';
+                document.getElementById('differenceDisplay').classList.remove('negative', 'positive', 'zero');
+                
+                // Reset des validations
+                AppState.validationState = { inspecteur: false, caissier: false };
+                AppState.userLevel = null;
+                AppState.userInfo = null;
+                updateValidationStep('inspecteurValidation', 'current');
+                updateValidationStep('caissierValidation', '');
+                document.getElementById('codeCaissier').disabled = true;
+                document.getElementById('btnSubmit').disabled = true;
+                
+                // Reset du mode urgence
+                if (AppState.isEmergencyMode) {
+                    toggleEmergencyMode();
+                }
+                
+                // Reset des sections conditionnelles
+                document.getElementById('cartesBancairesGroup').style.display = 'none';
+                document.getElementById('fermetureQuartSection').classList.remove('active');
+                
+                // Supprimer info caissier si présente
+                const etatDiv = document.getElementById('etat-caissier-info');
+                if (etatDiv) etatDiv.remove();
+                
+                // Reset de la date
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('session').value = today;
+                document.getElementById('currentSession').textContent = today;
+                
+                // Reset des informations utilisateur
+                updateUserInfo();
+                
+                MessageManager.clear();
+                MessageManager.showSuccess('✅ Formulaire réinitialisé.');
+                
+            } catch (error) {
+                console.error('❌ Erreur reset:', error);
+                MessageManager.showError('Erreur lors de la réinitialisation: ' + error.message);
+            }
+        }
+
+        // Toggle du dashboard
+        function toggleDashboard() {
+            const dashboard = document.getElementById('dashboard');
+            AppState.dashboardVisible = !AppState.dashboardVisible;
+            
+            if (AppState.dashboardVisible) {
+                dashboard.classList.remove('collapsed');
+                document.querySelector('.toggle-btn').textContent = '📊 Masquer';
+            } else {
+                dashboard.classList.add('collapsed');
+                document.querySelector('.toggle-btn').textContent = '📊 Afficher';
+            }
+        }
+
+        // Masquer la barre de statut
+        function hideStatusBar() {
+            document.getElementById('statusBar').classList.remove('show');
+        }
+
+        // Voir les détails d'un caissier
+        function viewCaissierDetails(caissierNom) {
+            MessageManager.show(`Chargement des détails pour ${caissierNom}...`, 'info');
+            
+            // TODO: Implémenter la vue détaillée des caissiers
+            setTimeout(() => {
+                MessageManager.show(`Détails pour ${caissierNom} - Fonctionnalité à développer`, 'warning');
+            }, 1000);
+        }
+
+        // ============================================================================
+        // INITIALISATION - VERSION PRODUCTION
+        // ============================================================================
+
+        // Initialisation au chargement de la page
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                console.log(`🚀 Initialisation système v${AppConfig.VERSION}`);
+                
+                // Exposer l'état pour le debug
+                window.AppState = AppState;
+                window.AppConfig = AppConfig;
+                
+                initializeUI();
+                setupEventListeners();
+                
+                // Test de connectivité initial
+                MessageManager.show('🔧 Vérification de la connexion...', 'info');
+                const connectionOK = await ConnectionManager.testConnection();
+                
+                if (connectionOK) {
+                    // Chargement des données en parallèle
+                    MessageManager.show('📥 Chargement des données...', 'info');
+                    
+                    await Promise.all([
+                        loadParametres(),
+                        rafraichirEtatCaissiers(true)
+                    ]);
+                    
+                    // Démarrage auto-refresh
+                    AutoRefreshManager.start();
+                    
+                    AppState.initialized = true;
+                    MessageManager.showSuccess('✅ Système initialisé avec succès');
+                } else {
+                    MessageManager.showWarning('⚠️ Connexion limitée - Mode dégradé activé');
+                    showOfflineMode();
+                }
+                
+            } catch (error) {
+                console.error('❌ Erreur initialisation:', error);
+                MessageManager.showError(`❌ Erreur lors de l'initialisation: ${error.message}`);
+                showOfflineMode();
+            }
+        });
+
+        // Initialisation de l'interface
+        function initializeUI() {
+            // Date par défaut
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('session').value = today;
+            document.getElementById('currentSession').textContent = today;
+            
+            // Validation des champs codes
+            setupCodeValidation();
+        }
+
+        // Configuration des événements
+        function setupEventListeners() {
+            // Événements de validation des codes
+            document.getElementById('codeInspecteur').addEventListener('input', function() {
+                const code = this.value;
+                const btn = document.getElementById('btnValidateInspecteur');
+                btn.disabled = !isValidCode(code);
+            });
+
+            document.getElementById('codeCaissier').addEventListener('input', function() {
+                const code = this.value;
+                const btn = document.getElementById('btnValidateCaissier');
+                btn.disabled = !isValidCode(code);
+            });
+
+            // Événement de soumission du formulaire
+            document.getElementById('movementForm').addEventListener('submit', handleFormSubmit);
+            
+            // Gestion des erreurs globales
+            window.addEventListener('error', function(event) {
+                console.error('Erreur JavaScript:', event.error);
+                MessageManager.showError('Une erreur inattendue s\'est produite. Vérifiez la console.');
+            });
+            
+            // Gestion de la connectivité
+            window.addEventListener('online', function() {
+                ConnectionManager.updateConnectionStatus('online');
+                MessageManager.show('Connexion rétablie', 'success');
+                if (AppState.initialized) {
+                    rafraichirEtatCaissiers(true);
+                }
+            });
+            
+            window.addEventListener('offline', function() {
+                ConnectionManager.updateConnectionStatus('offline');
+                MessageManager.showWarning('Connexion perdue. Fonctionnalités limitées.');
+            });
+        }
+
+        // Configuration de la validation des codes
+        function setupCodeValidation() {
+            // Les boutons sont initialement désactivés
+            document.getElementById('btnValidateInspecteur').disabled = true;
+            document.getElementById('btnValidateCaissier').disabled = true;
+            document.getElementById('btnSubmit').disabled = true;
+        }
+
+        // ============================================================================
+        // FONCTIONS UTILITAIRES ET CONFIGURATION
+        // ============================================================================
+
+        // Configuration URL Web App pour déploiement
+        window.configureWebApp = function(url) {
+            AppConfig.setWebAppUrl(url);
+            MessageManager.showSuccess('✅ URL configurée! Rechargement...');
+            setTimeout(() => window.location.reload(), 1000);
+        };
+
+        // Diagnostic système complet
+        window.systemDiagnostic = function() {
+            console.group('🔧 DIAGNOSTIC SYSTÈME PRODUCTION');
+            
+            console.log('📋 Configuration:', {
+                version: AppConfig.VERSION,
+                webAppUrl: AppConfig.WEB_APP_URL,
+                cacheSize: AppState.cache.size,
+                initialized: AppState.initialized
+            });
+            
+            console.log('📊 État Application:', {
+                connectionStatus: AppState.connectionStatus,
+                parametresLoaded: !!AppState.parametresData,
+                etatCaissiers: AppState.etatCaissiers.length,
+                validationState: AppState.validationState,
+                emergencyMode: AppState.isEmergencyMode
+            });
+            
+            console.log('🔧 Performance:', {
+                cacheHits: Array.from(AppState.cache.keys()).length,
+                autoRefresh: AppState.autoRefreshActive
+            });
+            
+            console.groupEnd();
+            
+            MessageManager.show(`
+                📊 Diagnostic Système Production v${AppConfig.VERSION}<br>
+                • Connexion: ${AppState.connectionStatus}<br>
+                • Paramètres: ${AppState.parametresData ? '✅' : '❌'}<br>
+                • Caissiers: ${AppState.etatCaissiers.length}<br>
+                • Cache: ${AppState.cache.size} entrées<br>
+                • Mode urgence: ${AppState.isEmergencyMode ? '🚨' : '✅'}<br>
+                • Auto-refresh: ${AppState.autoRefreshActive ? '✅' : '❌'}
+            `, 'info');
+        };
+
+        // Test de performance
+        window.performanceTest = async function() {
+            console.log('🧪 Test de performance...');
+            const startTime = performance.now();
+            
+            try {
+                await ConnectionManager.testConnection();
+                const duration = performance.now() - startTime;
+                MessageManager.showSuccess(`⚡ Test de performance: ${Math.round(duration)}ms`);
+            } catch (error) {
+                MessageManager.showError('❌ Test de performance échoué: ' + error.message);
+            }
+        };
+
+        // Nettoyage du cache
+        window.clearCache = function() {
+            AppState.cache.clear();
+            MessageManager.showSuccess('🗑️ Cache vidé');
+        };
+
+        // Messages de démarrage
+        console.log(`
+🎰 SYSTÈME GESTION CAISSE v${AppConfig.VERSION}
+==========================================
+🚀 MODE PRODUCTION ACTIVÉ
+
+✅ Fonctionnalités:
+   • Validation API complète
+   • Enregistrement réel
+   • Cache intelligent
+   • Retry automatique
+   • Mode urgence sécurisé
+   • Auto-refresh temps réel
+   • Gestion hors ligne
+
+📚 Fonctions disponibles:
+   • systemDiagnostic() - Diagnostic complet
+   • performanceTest() - Test de performance
+   • clearCache() - Vider le cache
+   • configureWebApp(url) - Configuration URL
+
+🔧 Ready for production deployment!
+        `);
+
+        // Exposition des objets globaux pour debug
+        window.AppState = AppState;
+        window.AppConfig = AppConfig;
+        window.MessageManager = MessageManager;
+        window.ConnectionManager = ConnectionManager;
+        window.AutoRefreshManager = AutoRefreshManager;
+    </script>
+</body>
+</html>
